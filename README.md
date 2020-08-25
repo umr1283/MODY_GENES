@@ -4,7 +4,7 @@ This repository contains all code and scripts used to perform the analyses descr
 
 The repository includes both [bioinformatics](bioinformatics) and [biostatistics](biostatistics) analyses.
 
-**Note:** the code has not been tested outside of its original environment and depends on data not publicly available.
+**Note: the code has not been tested outside of its original environment and depends on data not publicly available.**
 
 ## Bioinformatics
 
