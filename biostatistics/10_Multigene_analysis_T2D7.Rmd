@@ -1,0 +1,484 @@
+---
+title: 'Multigene MODY_GENES analyses T2D7 "`r params$VERSION`"'
+author: 'Mathilde Boissel'
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+monofont: "Source Code Pro"
+monofontoptions: "Scale=0.7"
+params:
+  outputCode: FALSE
+  nCores: !r parallel::detectCores()
+  theme_dark: FALSE
+  cache: FALSE
+  dpi: 120
+  ggFontSize: 9
+  GroupeGene: "CUSTOM_T2Dmono_CCDiabete"
+  yname: "CC_T2D7"
+  PopFilter: 'ALL'
+  VERSION: 'ACMGCUSTOM' ## 'CLASSIQUE' ## 
+output:
+  bookdown::html_document2:
+    theme: simplex
+    toc: true
+    toc_depth: 2
+    toc_float: 
+      collapsed: false
+    fig_width: 6.3
+    fig_height: 4.7
+    number_sections: true
+    self_contained: true
+    mathjax: default
+  bookdown::pdf_document2:
+    toc: true
+    toc_depth: 2
+    fig_width: 6.3
+    fig_height: 4.7
+    number_sections: true
+    latex_engine: "pdflatex"
+references:
+- id: sun_unified_2013
+  title: A Unified Mixed-Effects Model for Rare-Variant Association in Sequencing Studies
+  author:
+    - family: Sun
+      given: Jianping
+    - family: Zheng
+      given: Yingye
+    - family: Hsu
+      given: Li
+  container-title: Genetic Epidemiology
+  volume: 37
+  URL: 'http://dx.doi.org/10.1002/gepi.21717'
+  DOI: 10.1002/gepi.21717
+  issue: 4
+  number: 4
+  issn: 07410395
+  publisher: Wiley
+  page: 334--344
+  type: article-journal
+  issued:
+    year: 2013
+    month: 3
+    day: 9
+---
+
+```{r setup, include = FALSE}
+options(stringsAsFactors = FALSE)
+
+project_directory <- "./"
+script_name <- "10_Multigene_analysis_T2D7"
+outputPath <- paste0(project_directory, "/Data/",script_name,"/", params$VERSION)
+
+## need to recup 8 gene of group 6...
+project_directory <- "./"
+working_directory <- gsub("/PROJECT/", "/DATATMP/", project_directory)
+output_directory <- paste(working_directory, script_name, sep = "/")
+
+RawDir <- "/sequencing_data/"
+SourceDir <- paste0(project_directory, "/utils/")
+InputDir <- paste0(project_directory, "/Data/00_MAKE_DATASET/")
+CustomFile <- ""
+PhenotypeDir <- "/phenotypes_data/"
+Phenotype_file <- paste0(PhenotypeDir, "Phenotyes_latest.xlsx")
+
+url <- scan(file = paste0(project_directory, "/Scripts/settings_mongo.txt"), what = "character")
+
+### Load packages
+invisible(
+  lapply(
+    c(
+      "utils", "grDevices", "graphics", "stats", "methods",
+      "parallel", "scales", "readxl", "mongolite", "tidyverse",
+      "knitr", "Hmisc", "kableExtra"
+    ),
+    library,
+    character.only = TRUE
+  )
+)
+SourceDir <- paste0(project_directory, "/utils")
+source(paste0(SourceDir, "/MiST.R"))
+source(paste0(SourceDir, "/Parameters-class.R"))
+source(paste0(SourceDir, "/QC-class.R"))
+source(paste0(SourceDir, "/colFmt.R"))
+source(paste0(SourceDir, "/pretty_kable.R"))
+
+
+
+### Set knitr rmarkdown chunk options
+opts_chunk$set(
+  results = "asis",
+  size = "small",
+  include = TRUE,
+  echo = params$outputCode,
+  warning = params$outputCode,
+  message = params$outputCode,
+  tidy = FALSE,
+  crop = TRUE,
+  autodep = TRUE,
+  fig.align = "center",
+  fig.pos = "!h",
+  dpi = params$dpi,
+  fig.path = paste0(tempdir(), "/cache/"),
+  cache = params$cache,
+  cache.path = paste0(tempdir(), "/cache/")
+)
+
+
+### Define theme
+theme_set(theme_light(base_size = params$ggFontSize))
+
+
+## Genes and Transcripts
+GroupeGene <- params$GroupeGene
+liste_TR <- read.table(
+  file = paste0(RawDir, "Docs/Latest_info_gene.csv"),
+  header = TRUE,
+  sep = ";"
+) %>% 
+  filter(get(GroupeGene)==1) %>% 
+  select(gene_name, Transcript) %>% 
+  filter(!gene_name %in% c("BOLA2", "BOLA2B", "DTX2P1-UPK3BP1-PMS2P11", "RMST"))
+
+
+everything_finish <- read_rds(
+  path = paste0(
+    outputPath, "/",
+    "everything_finish.RDS"
+  )
+) %>% 
+  unnest(group)
+everything_finish$Analysis <- "ACMG" ## updated 
+
+## 1/ tous les gènes
+Group1 <- liste_TR$gene_name
+## 2/  les gènes "autosomiques dominants".
+Group2 <- "ABCC8, APPL1, BLK, CEL, GATA4, GATA6, GCK, HNF1A, HNF1B, HNF4A, INS, KCNJ11, KLF11, NEUROD1, PAX4, PDX1, RFX6, STAT3, WFS1" %>% 
+  strsplit(., ", ") %>%
+  unlist()
+## 3/ les mêmes gènes en enlevant les gènes "bordeline (pour lesquels la communauté à de gros doutes)" 
+## ainsi que KCNJ11 et ABCC8 (car ils peuvent aussi engendrer une hypoglycémie).
+Group3 <- "APPL1, GATA4, GATA6, GCK, HNF1A, HNF1B, HNF4A, INS, NEUROD1, PDX1, RFX6, STAT3, WFS1" %>%
+  strsplit(., ", ") %>%
+  unlist()
+## 4/ les gènes "autosomiques recessifs".
+Group4 <- "DNAJC3, FOXP3, GLIS3, IER3IP1, MNX1, NEUROG3, NKX2-2, PAX6, PCBD1, PPP1R15B, PTF1A, SLC19A2, SLC2A2, TRMT10A" %>%
+  strsplit(., ", ") %>%
+  unlist()
+## 5/ 
+Group5 <- "GCK, HNF1A, HNF4A, PDX1, CEL, PAX4, INS, NEUROD1, HNF1B" %>%
+  strsplit(., ", ") %>%
+  unlist()
+## 6/   ## 8 gene of interest
+Genes_Variants03 <- readr::read_rds(
+  path = paste0(
+    gsub(script_name, "03_Replic_HealthyNevada", output_directory), "/Genes_Variants.rds")
+)
+Group6 <- sort(names(Genes_Variants03)) ## 8 genes seen in replication HNP 
+## 7/  7 gene of interest (sans than group6 without HNF1B)
+Genes_Variants02 <- readr::read_rds(
+  path = paste0(
+    gsub(script_name, "02_Replic_UKBioBank", output_directory), "/Genes_Variants.rds")
+)
+Group7 <- sort(names(Genes_Variants02)) ##  7 genes seen in replication UK 
+
+```
+
+# Parameters
+
+  + Group of genes  
+Analyses have been made by group the genes classified according to their theme group refering to the file `"Latest_info_gene.csv"`.  
+Theme group selected is `r  params$GroupeGene`.  
+
+  + Genes and Transcripts  
+This selection represents **`r  length(unique(liste_TR$gene_name))`** genes or **`r  nrow(liste_TR)`** potential transcript.  
+
+  + "Super-Clusters"  
+Seven clusters of genes have been analysed together :  
+    - **Group1** (all genes in `r params$GroupeGene` : `r paste(Group1,collapse = ", ")`.  
+    - **Group2** ("genes autosomiques dominants"): `r paste(Group2,collapse = ", ")`.  
+    - **Group3** ("les mêmes gènes en enlevant les gènes bordeline"): `r paste(Group3,collapse = ", ")`.  
+    - **Group4** ("autosomiques recessifs"): `r paste(Group4,collapse = ", ")`.  
+    - **Group5** ("gènes officiels du MODY"): `r paste(Group5,collapse = ", ")`.  
+    - **Group6** ("8 gènes replication seen in HNP"): `r paste(Group6,collapse = ", ")`.  
+    - **Group7** ("7 gènes replication seen in UK"): `r paste(Group7,collapse = ", ")`.  
+
+  
+## Phenotypes
+
+```{r Phenotypes}
+Phenotypes <- read_excel(
+  path = Phenotype_file,
+  col_names = TRUE,
+  na = "NA",
+  guess_max = 9365
+) %>% 
+  as.data.frame()
+rownames(Phenotypes) <- paste(Phenotypes$RUN, Phenotypes$ID, sep = "_")
+```
+
+  + For ethnicity, we performed a principal component analysis (PCA), 
+    using **15,020** SNPs available in `MODY_GENES` and `1,000 Genomes project`, with $MAF>0.05$ within both populations.
+
+
+```{r Phenotypes_graph}
+ggplot(
+  data = filter(Phenotypes, !is.na(Pop_pred)), 
+  mapping = aes(x = PC1, y = PC2, colour = Pop_pred, shape = Pop_pred)
+) +
+  geom_point() +
+  stat_ellipse(size = 1.5, colour = "white") +
+  stat_ellipse(size = 1) +
+  scale_colour_viridis_d(option = "plasma", begin = 0, end = 4 / 5) +
+  scale_shape_discrete(solid = FALSE) +
+  labs(
+    title = "Predicted ethnicity of the MODY_GENES population",
+    subtitle = paste0("(Ethnicity was not computed for ", comma(nrow(filter(Phenotypes, is.na(Pop_pred)))), " samples)"), 
+    colour = "Predicted\nPopulation",
+    shape = "Predicted\nPopulation"
+  ) 
+cat("\n")
+```
+
+
+## Genotypes
+
+  + Genotype was set to:
+    - `0`, if the variant was not in the VCF;
+    - `-1` (`NA` value), if the variant was not in a segment with 8X of depth 
+      (depth information found in cover files and genotype was found in VCF).
+  
+  
+## Annotations
+
++ For each variant, we have the associated `gene`, `transcript`, `consequence`, `AA_change`, `RefSeq_mRNA` and `RefSeq_peptide`
+  + The MAF is computed on the whole population's project
+  + For each position (`chr_pos`), we have aggregate quality measures listed in VCF:
+    + `n`, the number of samples having a variation at this position;
+    + `QUAL`, the quality mean, mininimum and maximum;
+    + `DP`, the depth mean, mininimum and maximum;
+    + `PolyX`, the repeated base's count for INDELs;
+    + `POLYX_ge_5`, the number of samples with $PolyX \geq 5$.
+
+
+## Clusters after QCs  
+
+The 5 clusters of genes may have changed differently after QCs based on the selected analysis `r if(params$VERSION %in% "CLASSIQUE") {"**STRICT**, **ACMG** or **CUSTOM**"} else {"ACMG (in CUSTOM version)"} `. Because, for one gene, if all variants were excluded so this gene were removed from the group. 
+Indeed we obtain following groups :  
+
+```{r detailgroupSTRICT, eval = params$VERSION %in% "CLASSIQUE"}
+
+cat(
+  paste0("  + With **STRICT**, **Group1** (all genes in ", params$GroupeGene, " ) : ",  paste(unique(everything_finish[everything_finish$group=="Group1" & everything_finish$Analysis=="STRICT",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"), 
+  paste0("  + With **STRICT**, **Group2** ('genes autosomiques dominants'): ",  paste(unique(everything_finish[everything_finish$group=="Group2" & everything_finish$Analysis=="STRICT",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"), 
+  paste0("  + With **STRICT**, **Group3** ('les mêmes gènes en enlevant les gènes bordeline'): ",  paste(unique(everything_finish[everything_finish$group=="Group3" & everything_finish$Analysis=="STRICT",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"),  
+  paste0("  + With **STRICT**, **Group4** ('autosomiques recessifs'): ",  paste(unique(everything_finish[everything_finish$group=="Group4" & everything_finish$Analysis=="STRICT",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"),  
+  paste0("  + With **STRICT**, **Group5** ('genes officiels du MODY'): ",  paste(unique(everything_finish[everything_finish$group=="Group5" & everything_finish$Analysis=="STRICT",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"),
+  paste0("  + With **STRICT**, **Group6** (`8 gènes replication seen in HNP`): ",  paste(unique(everything_finish[everything_finish$group=="Group6" & everything_finish$Analysis=="STRICT",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"),
+  paste0("  + With **STRICT**, **Group7** ('7 gènes replication seen in UK'): ",  paste(unique(everything_finish[everything_finish$group=="Group7" & everything_finish$Analysis=="STRICT",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n")
+)
+```
+
+  + With **ACMG**, **Group1** (all genes in `r params$GroupeGene`) : `r paste(unique(everything_finish[everything_finish$group=="Group1" & everything_finish$Analysis=="ACMG",]$Detail_Geno[[1]]$Gene), collapse = ", ")`.  
+  
+  + With **ACMG**, **Group2** ("genes autosomiques dominants"): `r paste(unique(everything_finish[everything_finish$group=="Group2" & everything_finish$Analysis=="ACMG",]$Detail_Geno[[1]]$Gene),collapse = ", ")`.  
+  
+  + With **ACMG**, **Group3** ("les mêmes gènes en enlevant les gènes bordeline"): `r paste(unique(everything_finish[everything_finish$group=="Group3" & everything_finish$Analysis=="ACMG",]$Detail_Geno[[1]]$Gene),collapse = ", ")`.  
+  
+  + With **ACMG**, **Group4** ("autosomiques recessifs"): `r paste(unique(everything_finish[everything_finish$group=="Group4" & everything_finish$Analysis=="ACMG",]$Detail_Geno[[1]]$Gene),collapse = ", ")`.  
+  
+  + With **ACMG**, **Group5** ("genes officiels du MODY"): `r paste(unique(everything_finish[everything_finish$group=="Group5" & everything_finish$Analysis=="ACMG",]$Detail_Geno[[1]]$Gene),collapse = ", ")`.  
+  
+  + With **ACMG**, **Group6** ("8 gènes replication seen in HNP"): `r paste(unique(everything_finish[everything_finish$group=="Group6" & everything_finish$Analysis=="ACMG",]$Detail_Geno[[1]]$Gene),collapse = ", ")`.  
+  
+  + With **ACMG**, **Group7** ("7 gènes replication seen in UK"): `r paste(unique(everything_finish[everything_finish$group=="Group7" & everything_finish$Analysis=="ACMG",]$Detail_Geno[[1]]$Gene),collapse = ", ")`.  
+
+
+```{r detailgroupCUSTOM, eval = params$VERSION %in% "CLASSIQUE"}
+cat(
+  paste0("  + With **CUSTOM**, **Group1** (all genes in ", params$GroupeGene, " ) : ",  paste(unique(everything_finish[everything_finish$group=="Group1" & everything_finish$Analysis=="CUSTOM",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"), 
+  paste0("  + With **CUSTOM**, **Group2** ('genes autosomiques dominants'): ",  paste(unique(everything_finish[everything_finish$group=="Group2" & everything_finish$Analysis=="CUSTOM",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"), 
+  paste0("  + With **CUSTOM**, **Group3** ('les mêmes gènes en enlevant les gènes bordeline'): ",  paste(unique(everything_finish[everything_finish$group=="Group3" & everything_finish$Analysis=="CUSTOM",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"),  
+  paste0("  + With **CUSTOM**, **Group4** ('autosomiques recessifs'): ",  paste(unique(everything_finish[everything_finish$group=="Group4" & everything_finish$Analysis=="CUSTOM",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"),  
+  paste0("  + With **CUSTOM**, **Group5** ('genes officiels du MODY'): ",  paste(unique(everything_finish[everything_finish$group=="Group5" & everything_finish$Analysis=="CUSTOM",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"),
+  paste0("  + With **CUSTOM**, **Group6** (`8 gènes replication seen in HNP`): ",  paste(unique(everything_finish[everything_finish$group=="Group6" & everything_finish$Analysis=="CUSTOM",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n"), 
+  paste0("  + With **CUSTOM**, **Group7** ('7 gènes replication seen in UK'): ",  paste(unique(everything_finish[everything_finish$group=="Group7" & everything_finish$Analysis=="CUSTOM",]$Detail_Geno[[1]]$Gene),collapse = ", "), ".  \n")
+)
+```
+
+
+### Statistical Analyses 
+ 
+Rare variants have been analysed with the method *MiST* [@sun_unified_2013].  
+**All variants are analysed as one cluster (based on groups mentioned above) with subclusters based on genes**.  
+This method provides a score $\pi$ which represents the mean effect of the cluster and a score $\tau$ which represents the heterogeneous effect of the cluster.  
+The overall p-value tests the association between the set of variants and the trait of interest.  
+
+
+Let the equation of the model be: $Y = \alpha X + \hat{\pi} GZ$, where  
+$Y$ is the phenotype matrix (n x 1) for n individuals,  
+$X$ is the matrix of covariates (n x p) with p covariates,  
+$Z$ is the matrix (q x c) coded 0 or 1 if the q-th variant belong or not to the c-th gene and  
+$G$ is the genotype matrix (n x q) coded 0, 1 and 2 for AA, Aa, aa, where A is a major allele and a is a minor allele.  
+
+
+The main statistical analysis were performed with the following covariates:
+
+  + A case-control study for type 2 diabetes risk (`r params$yname`) adjusted for age, sex and BMI and ethnicity (with PC1 to PC5). 
+
+
+# Results 
+
+## MIST  
+```{r res_MiST}
+res_MiST <- cbind.data.frame(
+  Analysis = everything_finish$Analysis,
+  Group = everything_finish$group,
+  bind_rows(everything_finish$stat_MiST)
+)
+
+
+res_MiST %>% 
+  mutate(P.values_col = map(.x = p.value.overall,.f = function(.x) ifelse(as.numeric(.x)<0.05, TRUE, FALSE))) %>% 
+  mutate(P.values_col = ifelse(is.na(P.values_col), FALSE, P.values_col)) %>% 
+  mutate(
+    p.value.overall = cell_spec(
+      formatC(p.value.overall), 
+      color = ifelse(P.values_col, "white", "grey"), 
+      background = ifelse(P.values_col, "firebrick", "None"),
+      bold = ifelse(P.values_col, TRUE, FALSE))
+  ) %>% 
+  select(-P.values_col) %>% 
+  kable(align = "c", format = "html", escape = FALSE, row.names = FALSE) %>% 
+  kable_styling(bootstrap_options = c("bordered", "condensed", "responsive", "striped"), full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>% 
+  collapse_rows(columns = 1)
+```
+
+# Cluster details  
+
+
+## Clinical data {.tabset}  
+
+```{r Clinicaldata}
+for (igroup in unique(everything_finish$group)) {
+  for (ianalysis in unique(everything_finish$Analysis)) {
+    cat(paste0("\n### ", igroup, " _ Analysis ", ianalysis, " {-} \n\n"))
+     
+    everything_finish %>% 
+      filter(group == igroup & Analysis == ianalysis) %>% 
+      select(clinicalData) %>% 
+      unnest(cols = c(clinicalData)) %>% 
+      pretty_kable()
+  }
+}
+```
+
+## Odd Ratios {.tabset}  
+```{r res_rare}
+for (igroup in unique(everything_finish$group)) {
+  for (ianalysis in unique(everything_finish$Analysis)) {
+    cat(paste0("\n### ", igroup, " _ Analysis ", ianalysis, " {-}\n\n"))
+    
+    everything_finish %>% 
+    filter(group == igroup & Analysis == ianalysis) %>% 
+    select(stat_rare) %>% 
+    unnest(cols = c(stat_rare)) %>%
+    pretty_kable(row.names = FALSE)
+  }
+}
+```
+
+## Plots of clusters {.tabset}  
+
+```{r plot_cluster}
+for (igroup in unique(everything_finish$group)) {
+  for (ianalysis in unique(everything_finish$Analysis)) {
+    cat(paste0("\n### ", igroup, " _ Analysis ", ianalysis, " {-}\n\n"))
+
+    p <- everything_finish %>% 
+      filter(group == igroup & Analysis == ianalysis) %>% 
+      select(Annotation_qced) %>% 
+      unnest() %>% 
+      ggplot(data = ., aes(y = Variant, x = Gene)) +
+        ggtitle(paste0("Analysed cluster for ",igroup, " Analysis ", ianalysis)) +
+        ylab("Variants") +
+        xlab("subClusters") +
+        geom_tile(fill = "grey50", colour = "grey80") + ## rectangle dans le graph
+        scale_x_discrete(expand = c(0, 0)) +
+        scale_y_discrete(expand = c(0, 0)) +
+        theme(
+          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(), 
+          panel.grid.major.y = element_blank(), 
+          panel.grid.minor.y = element_blank()
+        )
+    print(p)
+    cat("\n")
+  }
+}
+```
+
+# Quality Controls  
+
+
+## QCs at the cluster level {.tabset}  
+
+```{r QCcluster}
+for (igroup in unique(everything_finish$group)) {
+  for (ianalysis in unique(everything_finish$Analysis)) {
+    cat(paste0("\n### ", igroup, " _ Analysis ", ianalysis, " {-} \n\n"))
+    
+    qc_tab <- everything_finish %>%
+      filter(group == igroup & Analysis == ianalysis) %>%
+      .[["QC"]] %>%
+      unlist(recursive = FALSE) %>% 
+      lapply(X = ., FUN = function(.x) {.x["Comment"]}) %>% 
+      tibble(Comment = .) %>% 
+      as.data.frame() %>%
+      tibble::rownames_to_column(var = "Step") %>%
+      slice(-c(1:5)) %>% 
+      dplyr::mutate(
+        Step = Step %>%
+          gsub("QC", "", .) %>%
+          as.numeric() %>%
+          sprintf("QC%02d", .),
+        Comment = Comment %>%
+          gsub("After[^,]*, ", "", .) %>%
+          gsub("On[^,]*, ", "", .) %>%
+          gsub("there is no", "0", .)
+      )
+    if (params$VERSION %in% "ACMGCUSTOM") {
+      QC12_excluded <- everything_finish %>%
+        filter(group == igroup & Analysis == ianalysis) %>%
+        .[["QC12"]] %>%
+        unlist(recursive = FALSE)
+      
+      n_eff <- everything_finish %>%
+        filter(group == igroup & Analysis == ianalysis) %>%
+        .[["QC"]] %>%
+        unlist(recursive = FALSE) %>%
+        tail(1) %>%
+        .[[1]] %>%
+        .["N_origin"] 
+      n_ex <- everything_finish %>%
+        filter(group == igroup & Analysis == ianalysis) %>%
+        .[["QC"]] %>%
+        unlist(recursive = FALSE) %>%
+        tail(1) %>%
+        .[[1]] %>%
+        .["N_excluded"] 
+      
+      qc_tab <- rbind.data.frame(
+        qc_tab, 
+        c("QC12", paste0(length(QC12_excluded), " variant",if(length(QC12_excluded)>1){"s"}," have been excluded leading to ",n_eff - n_ex - length(QC12_excluded) ," in the dataset."))
+      )
+    }
+    
+    pretty_kable(data = qc_tab, row.names = FALSE, align = c("c", "l"), full_width = FALSE) 
+    
+  }
+}
+
+```
+
+# References
+

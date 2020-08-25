@@ -1,0 +1,983 @@
+---
+title: 'MODY_GENES Report 8 Gene Monogenique CUSTOM T2D61'
+subtitle: 'Group of genes: "CUSTOM_T2Dmono_CCDiabete" / "ACMG-CUSTOM InSilico" '
+author: 'Mathilde Boissel'
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+monofont: 'Source Code Pro'
+monofontoptions: "Scale=0.7"
+params:
+  output_code: FALSE
+  cache: FALSE
+  dpi: 90
+  gg_fontsize: 9
+  raw_directory: './Data/00_MAKE_DATASET/'
+  group_name: "CUSTOM_T2Dmono_CCDiabete" 
+  type_report: 'Custom_report' ## CC_report, Quanti_report or Custom_report
+  analysis_to_import: "CC_T2D61" 
+  group_description_file: '/sequencing_data/Docs/Latest_info_gene.csv' 
+  what: 'Report_light' # 'Report_light' # Report_allin
+  res_dir: './/Data/11_ACMG_CUSTOMInSilico_T2D61/000-RESULTS/'
+  max_signif: 50
+  alpha_threshold: 0.05
+  phenotype_file: '/phenotypes_data/Phenotyes_latest.xlsx'
+  QUALmean_treshold: 50
+output:
+  bookdown::html_document2:
+    theme: simplex
+    toc: true
+    toc_depth: 4
+    toc_float: 
+      collapsed: false
+    fig_width: 6.3
+    fig_height: 4.7
+    number_sections: true
+    self_contained: true
+    mathjax: default
+  pdf_document:
+    df_print: kable
+    fig_height: 4.7
+    fig_width: 6.3
+    latex_engine: pdflatex
+    number_sections: true
+    toc: true
+    toc_depth: 4
+    keep_tex: true
+references:
+- id: sun_unified_2013
+  title: A Unified Mixed-Effects Model for Rare-Variant Association in Sequencing Studies
+  author:
+  - family: Sun
+    given: Jianping
+  - family: Zheng
+    given: Yingye
+  - family: Hsu
+    given: Li
+  container-title: Genetic Epidemiology
+  volume: 37
+  URL: 'http://dx.doi.org/10.1002/gepi.21717'
+  DOI: 10.1002/gepi.21717
+  issue: 4
+  number: 4
+  issn: 07410395
+  publisher: Wiley
+  page: 334--344
+  type: article-journal
+  issued:
+    year: 2013
+    month: 3
+    day: 9
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+options(stringsAsFactors = FALSE)
+
+project_directory <- "./"
+
+### Load packages and functions
+library(parallel)
+library(grid)
+library(scales)
+library(readxl)
+library(ggrepel)
+library(Hmisc)
+library(kableExtra)
+library(knitr)
+library(DT)
+library(tidyverse)
+
+### Source MC's functions
+source(paste0(project_directory, "/utils/format_pval.R"))
+source(paste0(project_directory, "/utils/ggmanhattan.R"))
+source(paste0(project_directory, "/utils/hijack.R"))
+source(paste0(project_directory, "/utils/pretty_kable.R"))
+
+### Set knitr rmarkdown chunk options
+knitr::opts_chunk$set(
+  results = "asis",
+  size = "small",
+  include = TRUE,
+  echo = params$output_code,
+  warning = params$output_code,
+  message = params$output_code,
+  tidy = FALSE,
+  crop = TRUE,
+  autodep = TRUE,
+  fig.align = "center",
+  fig.pos = "!h",
+  dpi = params$dpi,
+  fig.path = paste0(tempdir(), "/cache/"),
+  cache = params$cache,
+  cache.path = paste0(tempdir(), "/cache/")
+)
+
+### Define theme
+theme_set(theme_light(base_size = params$gg_fontsize))
+scale_colour_viridis_d <- hijack(scale_colour_viridis_d, option = "plasma", begin = 0, end = 4 / 5)
+scale_colour_viridis_c <- hijack(scale_colour_viridis_c, option = "plasma", begin = 0, end = 4 / 5)
+scale_fill_viridis_d <- hijack(scale_fill_viridis_d, option = "plasma", begin = 0, end = 4 / 5)
+scale_fill_viridis_c <- hijack(scale_fill_viridis_c, option = "plasma", begin = 0, end = 4 / 5)
+viridis_pal <- hijack(viridis_pal, option = "plasma", begin = 0, end = 4 / 5)
+
+## Genes and Transcripts
+all_groups <- read.table(file = params$group_description_file, header = TRUE, sep = ";") %>% 
+  dplyr::filter(!gene_name %in% c("BOLA2", "BOLA2B", "DTX2P1-UPK3BP1-PMS2P11", "RMST")) 
+
+list_transcripts <- all_groups %>% 
+  dplyr::filter(get(params$group_name)==1) %>% 
+  dplyr::select(gene_name, Transcript)
+
+##STRICT analysis
+
+STRICTdefSNP <- c(
+  "initiator_codon_variant", "stop_retained_variant", 
+  "stop_lost", "stop_gained", "missense_variant", 
+  "splice_donor_variant", "splice_acceptor_variant"
+)
+
+STRICTdefINDEL <- c("frameshift_variant", "inframe_insertion", "splice_acceptor_variant", "splice_donor_variant")
+
+
+dir.create(path = params$res_dir, mode = "0777", showWarnings = FALSE)
+images_dir <- paste0(params$res_dir, "Images_article/")
+dir.create(path = images_dir, mode = "0777", showWarnings = FALSE)
+workingdir <- ".//Data/11_ACMG_CUSTOMInSilico_T2D61/"
+
+CustomFile <- ".//Docs/CUSTOM_files/custom_22072020.xlsx"
+InfoCUSTOM <- read_excel(path = CustomFile, sheet = 1, col_names = TRUE, col_types = "text")
+
+list_transcripts <- list_transcripts %>%
+  filter(gene_name %in% InfoCUSTOM$Gene)
+```
+
+# Parameters
+
+## Analysed group
+
+Analyses have been made by group. The current group of studied is ``r params$group_name``.
+The custom file used were ``r basename(CustomFile)``. 
+
+## Genes and Transcripts Or Enhancers
+
+The current group includes **`r length(unique(InfoCUSTOM$Gene))`** gene or **`r nrow(list_transcripts)`** potential transcripts.  
+Each gene will be analysed at the transcript level, for all transcripts available.
+
+
+## `STRICT` to `CUSTOM`  
+
+Filter `STRICT` have been selected
+
+  + When the analysis selected is `STRICT`  
+    - SNPs were selected when: `r paste("  \n", paste0(paste(rep("  ", 4), collapse = ""), '+ "', STRICTdefSNP, '"\n'), sep = "")`.
+    - INDELs were selected when: `r paste("  \n", paste0(paste(rep("  ", 4), collapse = ""), '+ "', STRICTdefINDEL, '"\n'), sep = "")`.
+    
+  + Then, from `STRICT` selection, the QC11 do the `CUSTOM` final selection based on the file ``r basename(CustomFile)``.  
+
+
+## Other parameters
+
+- Minor allele frequency threshold to define rare variant: $MAF < 0.01$
+- Exclusion of `Synonymous` variant: `FALSE`
+- Cluster in *MiST* analysis: `none`  
+  i.e., all variants are analysed as a single cluster (at the transcript scale for all gene) 
+  without subcluster based on mutation’s type.
+
+
+# Material & Methods
+
+## Phenotypes
+
+```{r Phenotypes}
+Phenotypes <- readxl::read_excel(path = params$phenotype_file, col_names = TRUE, guess_max = 9000) %>%
+  as.data.frame %>% 
+  column_to_rownames(var = "IID")
+```
+
+  + For ethnicity, we performed a principal component analysis (PCA), 
+    using **15,020** SNPs available in `MODY_GENES` and `1,000 Genomes project`, with $MAF>0.05$ within both populations.
+
+
+```{r ethnicity}
+cat("\n")
+ggplot(
+  data = dplyr::filter(Phenotypes, !is.na(Pop_pred)), 
+  mapping = aes(x = PC1, y = PC2, colour = Pop_pred, shape = Pop_pred)
+) +
+  geom_point() +
+  stat_ellipse(size = 1.5, colour = "white") +
+  stat_ellipse(size = 1) +
+  scale_colour_viridis_d() +
+  scale_shape_discrete(solid = FALSE) +
+  labs(
+    title = "Predicted ethnicity of the MODY_GENES population",
+    subtitle = paste0(
+      "(Ethnicity was not computed for ", 
+      scales::comma(nrow(dplyr::filter(Phenotypes, is.na(Pop_pred)))), 
+      " samples)"), 
+    colour = "Predicted\nPopulation",
+    shape = "Predicted\nPopulation"
+  ) 
+cat("\n")
+```
+
+
+## Statistical Analyses 
+ 
+Rare variants have been analysed with the method *MiST* [@sun_unified_2013].  
+All variants are analysed as a single cluster (at the gene scale, transcript by transcript) without subcluster based on mutation's type.  
+This method provides a score $\pi$ which represents the mean effect of the cluster and a score $\tau$ which represents the heterogeneous effect of the cluster.  
+The overall p-value tests the association between the set of variants and the trait of interest.  
+
+
+Let the equation of the model be: $Y = \alpha X + \hat{\pi} GZ$, where
+$Y$ is the phenotype matrix (n x 1) for n individuals,
+$X$ is the matrix of covariates (n x p) with p covariates,
+$Z$ is a vector of q ones for the q variants and
+$G$ is the genotype matrix (n x q) coded 0, 1 and 2 for AA, Aa, aa, where A is a major allele and a is a minor allele. 
+
+
+Statistical analyses have been performed with the following covariates:
+
+  
+```{r covariables}
+cat(
+  "\n  + `age`\n",
+  "\n  + `sex`\n",
+  ifelse(
+    test = any(params$analysis_to_import %in% c("CC_Obesity", "CC_OBESITE", "CC_Obesity_child")),
+    yes =  "\n  + `BMI` (not for obesity related trait)\n", 
+    no = "\n  + `BMI`\n"
+  ),
+  ifelse(
+    test = any(params$analysis_to_import %in% c("CC_OBESITE")),
+    yes =  "\n  + `INFO_DIAB` (only for CC_OBESITE with adults)\n", 
+    no = ""
+  ),
+  "\n  + `PC1` to `PC5` (ethnicity)\n"
+)
+```
+
+```{r analysis_to_import}
+cat(
+  "The following analys", ifelse(length(params$analysis_to_import)>1, "e", "i"), "s have been performed:  \n",
+  paste("\n  + ", params$analysis_to_import, "\n"), 
+  sep = ""
+)
+```
+
+
+# Results
+
+```{r GET_BACK_RDS}
+cat("\n")
+
+RES_RARE <- list.files(path = paste0(workingdir), pattern = "xxr.RDS", recursive = TRUE, full.names = TRUE) %>% 
+  lapply(X = ., FUN = function(xrds) {
+    res <- readRDS(xrds) 
+    if (nrow(res$res_rare[[1]])==0) {
+      tmp <- matrix(rep(NA, 14), nrow = 1, ncol = 14) 
+      colnames(tmp) <- names(res$res_rare[[1]])
+      qc11_done <- res$qc11_done[[1]]
+      names(qc11_done) <- "qc11_done"
+      bind_cols(res %>% select(-res_rare, -qc11_done), as.data.frame(tmp)) %>% 
+        mutate(qc11_done = qc11_done)
+    } else {
+      res %>% 
+      unnest(cols = c(res_rare, qc11_done)) 
+    }
+  }) 
+
+Log <- list.files(path = paste0(workingdir), pattern = "xxLog.RDS", recursive = TRUE, full.names = TRUE) %>% 
+  lapply(X = ., FUN = function(xrds) {
+    readRDS(xrds)
+  })
+
+QC_db <- list.files(path = paste0(workingdir), pattern = "xxqc.RDS", recursive = TRUE, full.names = TRUE) %>% 
+  lapply(X = ., FUN = function(xrds) {
+    readRDS(xrds)
+  })
+
+
+#### get back results ####
+
+res_rare <- RES_RARE %>% 
+  bind_rows() %>% 
+  mutate(analyse_LARGE_STRICT = "STRICT>ACMG_CUSTOM") %>%
+  dplyr::select(Gene_Symbol, ENST, analyse_LARGE_STRICT, y_name, covariates, sample_size, qc11_done, SubClusters, everything()) %>% 
+  mutate(SubClusters1 = NULL) %>% 
+  dplyr::select(-error, error)
+
+names(res_rare) <- gsub("\\.", "_", names(res_rare))
+
+if (params$type_report == "Custom_report") {
+  all_data <- res_rare %>% 
+    filter(nb_rare_var>0) %>% 
+    dplyr::filter(
+      y_name %in% params$analysis_to_import
+    ) %>% 
+    dplyr::group_by(y_name, analyse_LARGE_STRICT) %>% 
+    tidyr::nest() %>% 
+    dplyr::mutate(
+      data = purrr::map(
+        .x = data, 
+        .f = right_join, 
+        y = res_rare %>% select(ENST, Gene_Symbol) %>% distinct(), 
+        by = c("Gene_Symbol", "ENST")
+      )
+    ) %>% 
+    tidyr::unnest(cols = c(data)) %>% 
+    mutate(
+      y_graph = OR - 1
+    ) %>% 
+    select(
+      c("y_name","analyse_LARGE_STRICT", "Gene_Symbol", "ENST", "OR", "y_graph", "p_value_overall", "p_value_S_pi", "p_value_S_tau", "error")
+    ) %>%
+    group_by(y_name, analyse_LARGE_STRICT) %>% 
+    tidyr::nest() %>% 
+    mutate(
+      main_y_axis = purrr::map(.x = data, .f = function(.data) {
+        .data %>% 
+          mutate(or_order = replace_na(OR - 1, 0)) %>% 
+          arrange(or_order) %>%
+          mutate(x_genes = factor(x = Gene_Symbol, levels = unique(Gene_Symbol))) %>% 
+          select(-c("Gene_Symbol", "ENST", "or_order")) %>%
+          mutate(signe = factor(sign(y_graph)))
+      }),
+      second_y_axis = purrr::map(.x = main_y_axis, .f = function(.data) {
+        .data %>% 
+          tidyr::gather(key = pvalues_name, value = pvalue, c("p_value_overall", "p_value_S_pi", "p_value_S_tau")) %>% 
+          mutate(
+            pval_trans = -log10(pvalue),
+            pvalues_name = factor(pvalues_name, levels = c("p_value_overall", "p_value_S_pi", "p_value_S_tau")),
+            factor_norm = (max(pval_trans, na.rm = TRUE) / (max(y_graph, na.rm = TRUE))),
+            pval_trans_norm =  pval_trans / factor_norm
+          )
+      })
+    ) %>% 
+    mutate(
+      gg = purrr::map2(.x = main_y_axis, .y = second_y_axis, .f = function(main_y, second_y) {
+        ggplot(data = main_y) +
+          geom_bar(
+            aes(
+              x = x_genes,
+              y = y_graph,
+              fill = signe
+            ),
+            stat = "identity", 
+            show.legend = FALSE,
+            alpha = 2/3
+          ) +
+          geom_point(
+            data = second_y,
+            aes(
+              x = x_genes,
+              y = pval_trans_norm,
+              colour = pvalues_name,
+              shape = pvalues_name,
+              size = pvalues_name
+            ),  
+            inherit.aes = FALSE
+          ) +
+          geom_hline(
+            aes(yintercept = -log10(0.05)/unique(second_y[["factor_norm"]]), linetype = "-log10(0.05)"),
+            colour = "firebrick2"
+          ) +
+          labs(x = NULL, y = "OR") +
+          scale_fill_viridis_d(
+            option = "plasma", 
+            begin = 1/5, 
+            end = 4/5
+          ) +
+          scale_linetype_manual(
+            name = "P-Value threshold", 
+            values = 2, 
+            label = expression(alpha==0.05)
+          ) +
+          scale_colour_manual(
+            name = "Parameter's p-value",
+            label = list("Overall", expression("Score"~pi), expression("Score"~tau)),
+            values = c(
+              "p_value_overall" = "firebrick2", 
+              "p_value_S_pi" = "#B12A90", 
+              "p_value_S_tau" = "#E16462"
+            )
+          ) +
+          scale_shape_manual(
+            name = "Parameter's p-value",
+             label = list("Overall", expression("Score"~pi), expression("Score"~tau)),
+            values = c("p_value_overall" = 23, "p_value_S_pi" = 25, "p_value_S_tau" = 24)
+          ) +
+          scale_size_manual(
+            name = "Parameter's p-value",
+            label = list("Overall", expression("Score"~pi), expression("Score"~tau)),
+            values = c("p_value_overall" = 2, "p_value_S_pi" = 1.25, "p_value_S_tau" = 1.25)
+          ) +
+          scale_y_continuous(
+            labels = function(x) {x+1},
+            expand = expansion(mult = c(0.05, 0.05)), 
+            sec.axis = sec_axis(
+              trans = ~ . * unique(second_y[["factor_norm"]]),
+              name = expression(italic(P)),
+              labels = function(x) {
+                parse(text = ifelse(x==0, "1", paste0("10^-", x)))
+              },
+              breaks = pretty_breaks(n = 3)(range(second_y[["pval_trans"]], na.rm = TRUE))
+            )
+          ) +
+          theme(
+            axis.text.x = element_text(angle = 45, hjust = 1, size = rel(0.8), face = "italic")
+          )
+      })
+    ) 
+    
+    all_data <- all_data %>% 
+    mutate(
+      main_y_axis_bis = map(.x = data, .f = function(.data) {
+        
+        .data %>% 
+          mutate(or_order = replace_na(OR - 1, 0)) %>% 
+          arrange(or_order) %>% 
+          mutate(
+            Gene_Symbol = map2_chr(.x = error, .y = Gene_Symbol, .f = function(error, Gene_Symbol){
+              res <- ifelse(
+                test = grepl(x = error, pattern = "[warning] glm.fit: fitted probabilities numerically 0 or 1 occurred", perl = FALSE, fixed = TRUE),
+                yes = paste0(Gene_Symbol, "*"),
+                no = ifelse(test = error %in% "None", yes = Gene_Symbol, no = paste0(Gene_Symbol, "#"))
+              )
+              return(res)
+            })
+          ) %>% 
+          mutate(OR = ifelse(test = !(is.na(error) | error%in% "None"), yes = NA, no = OR)) %>% 
+          mutate(or_order = ifelse(test = !(is.na(error) | error%in% "None"), yes = NA, no = or_order)) %>% 
+          mutate(y_graph = ifelse(test = !(is.na(error) | error%in% "None"), yes = NA, no = y_graph)) %>% 
+          mutate(p_value_overall = ifelse(test = !(is.na(error) | error%in% "None"), yes = NA, no = p_value_overall)) %>% 
+          mutate(p_value_S_pi = ifelse(test = !(is.na(error) | error%in% "None"), yes = NA, no = p_value_S_pi)) %>% 
+          mutate(p_value_S_tau = ifelse(test = !(is.na(error) | error%in% "None"), yes = NA, no = p_value_S_tau)) %>% 
+          mutate(x_genes = factor(x = Gene_Symbol, levels = unique(Gene_Symbol))) %>% 
+          select(-c("Gene_Symbol", "ENST", "or_order")) %>%
+          mutate(signe = factor(sign(y_graph)))
+      }),
+      second_y_axis_bis = map(.x = main_y_axis_bis, .f = function(.data) {
+        .data %>% 
+          gather(key = pvalues_name, value = pvalue, c("p_value_overall", "p_value_S_pi", "p_value_S_tau")) %>% 
+          mutate(
+            pval_trans = -log10(pvalue),
+            pvalues_name = factor(pvalues_name, levels = c("p_value_overall", "p_value_S_pi", "p_value_S_tau")),
+            factor_norm = (max(pval_trans, na.rm = TRUE) / (max(y_graph, na.rm = TRUE))),
+            pval_trans_norm =  pval_trans / factor_norm
+          )
+      })
+    ) %>% 
+    mutate( 
+      gg_withoutErrors = map2(.x = main_y_axis_bis, .y = second_y_axis_bis, .f = function(main_y, second_y) {
+        
+        ggplot(data = main_y) +
+          geom_bar(
+            aes(
+              x = x_genes,
+              y = y_graph,
+              fill = signe
+            ),
+            stat = "identity", 
+            show.legend = FALSE,
+            alpha = 2/3
+          ) +
+          geom_point(
+            data = second_y,
+            aes(
+              x = x_genes,
+              y = pval_trans_norm,
+              colour = pvalues_name,
+              shape = pvalues_name,
+              size = pvalues_name
+            ),  
+            inherit.aes = FALSE
+          ) +
+          geom_hline(
+            aes(yintercept = -log10(0.05)/unique(second_y[["factor_norm"]]), linetype = "-log10(0.05)"),
+            colour = "firebrick2"
+          ) +
+          labs(x = NULL, y = "OR") +
+          scale_fill_viridis_d(
+            option = "plasma", 
+            begin = 1/5, 
+            end = 4/5
+          ) +
+          scale_linetype_manual(
+            name = "P-Value threshold", 
+            values = 2, 
+            label = expression(alpha==0.05)
+          ) +
+          scale_colour_manual(
+            name = "Parameter's p-value",
+            label = list("Overall", expression("Score"~pi), expression("Score"~tau)),
+            values = c(
+              "p_value_overall" = "firebrick2", 
+              "p_value_S_pi" = "#B12A90", 
+              "p_value_S_tau" = "#E16462"
+            )
+          ) +
+          scale_shape_manual(
+            name = "Parameter's p-value",
+             label = list("Overall", expression("Score"~pi), expression("Score"~tau)),
+            values = c("p_value_overall" = 23, "p_value_S_pi" = 25, "p_value_S_tau" = 24)
+          ) +
+          scale_size_manual(
+            name = "Parameter's p-value",
+            label = list("Overall", expression("Score"~pi), expression("Score"~tau)),
+            values = c("p_value_overall" = 2, "p_value_S_pi" = 1.25, "p_value_S_tau" = 1.25)
+          ) +
+          scale_y_continuous(
+            labels = function(x) {x+1},
+            expand = expansion(mult = c(0.05, 0.05)),
+            sec.axis = sec_axis(
+              trans = ~ . * unique(second_y[["factor_norm"]]),
+              name = expression(italic(P)),
+              labels = function(x) {
+                parse(text = ifelse(x==0, "1", paste0("10^-", x)))
+              },
+              breaks = pretty_breaks(n = 3)(range(second_y[["pval_trans"]], na.rm = TRUE))
+            )
+          ) +
+          theme(
+            axis.text.x = element_text(angle = 45, hjust = 1, size = rel(0.8), face = "italic")
+          ) +
+          labs(
+            caption = paste0(
+              "* : Warning 'fitted probabilities numerically 0 or 1 occurred'", "\n", 
+              "# : Others warning or MiST not performed"
+            )
+          ) 
+          
+      })
+    )
+ 
+# all_data$gg_withoutErrors
+}
+
+
+```
+
+
+## Rare Variants {.tabset .tabset-fade .tabset-pills}
+
+### Figures {- .tabset}
+
+```{r graphs_rare}
+for (ianalysis in params$analysis_to_import) {
+  res_rare_signifi <- res_rare %>% 
+    filter(y_name %in% ianalysis & !(is.na(p_value_overall)) & p_value_overall <= params$alpha_threshold)
+  
+  analysis_type = unique(res_rare$analyse_LARGE_STRICT)
+  
+  {
+    cat("\n\n#### ", ianalysis, "_", analysis_type, " {-}\n", sep = "")
+    res_rare_signif <- res_rare_signifi %>% 
+      filter(analyse_LARGE_STRICT %in% analysis_type)
+
+    if (nrow(res_rare_signif) > 0) {
+      res_rare_signif <- res_rare_signif %>% 
+        mutate(
+          Pvalue_Overall = as.factor(
+            ifelse(test = p_value_overall < 0.01, yes = "Pv<0.01", no = paste0("Pv<=", params$alpha_threshold))
+          ),
+          Genes = paste0(Gene_Symbol, "_", ENST)
+        ) %>% 
+        group_by(Gene_Symbol) %>% 
+        mutate(avg_spi = rep(mean(S_pi), n())) %>% 
+        ungroup() %>% 
+        arrange(desc(avg_spi), Gene_Symbol, desc(S_pi)) %>%
+        mutate(Genes = factor(x = Genes, levels = unique(Genes)))
+        
+        
+      if (nrow(res_rare_signif) > params$max_signif) {
+        caption.txt <- paste(
+          comma(nrow(res_rare_signif)), 
+          "genes were significant, only the top", params$max_signif, "is shown."
+        )
+        res_rare_signif <- res_rare_signif[head(order(res_rare_signif[["S_pi"]], decreasing = TRUE), params$max_signif), ]
+      } else {
+        caption.txt <- ""
+      }
+      
+      factor_norm <- with(res_rare_signif, (max(S_tau) / max(S_pi)))
+      s_tau_breaks <- pretty_breaks(n = 2)(res_rare_signif[["S_tau"]])
+      
+      fig_rare <- (ggplot(res_rare_signif) +
+        geom_hline(
+          data = data.frame(y = s_tau_breaks),
+          mapping = aes(yintercept = y / factor_norm),
+          linetype = 2, 
+          size = 0.25, 
+          colour = "grey87"
+        ) +
+        geom_bar(mapping = aes(x = Genes, y = S_pi, fill = Pvalue_Overall), stat = "identity") +
+        geom_bar(mapping = aes(x = Genes, y = S_tau / factor_norm, fill = "S_tau"), width = 0.25, stat = "identity") +
+        theme(
+          legend.text = element_text(size = rel(0.9)),
+          legend.key.size = unit(1, "lines"),
+          legend.position = "top", 
+          legend.justification = "left", 
+          legend.direction = "horizontal",
+          panel.grid.major.x = element_blank(),
+          panel.grid.minor.x = element_blank(),
+          panel.grid.minor.y = element_blank(),
+          legend.background = element_rect(colour = "grey70", fill = NA),
+          axis.text.x = element_text(angle = 75, vjust = 1, hjust = 1, size = rel(0.90))
+        ) +
+        scale_y_continuous(
+          expand = expansion(mult = c(0, 0.10)),
+          limits = c(0, NA),
+          sec.axis = sec_axis(
+            trans = ~. * factor_norm,
+            name = expression(Score(tau)),
+            breaks = s_tau_breaks
+          )
+        ) +
+        scale_fill_viridis_d(
+          begin = 1 / 5,
+          breaks = c("Pv<0.01", paste0("Pv<=", params$alpha_threshold), "S_tau"),
+          labels = list(
+            bquote(Score(pi) ~ " with " ~ p[overall] < 0.01),
+            bquote(Score(pi) ~ " with " ~ p[overall] <= .(params$alpha_threshold)),
+            bquote(Score(tau))
+          )
+        ) +
+        labs(
+          title = paste("Rare Analyses of", ianalysis),
+          caption = caption.txt,
+          y = expression(Score(pi)),
+          fill = NULL
+        )
+      ) 
+      fig_rare %>% 
+        print()
+      cat("\n")
+      
+      
+    } else {
+      cat("NOTE: No significant `Pvalue_Overall`!\n")
+      cat("\n")
+    }
+  
+    if(params$type_report == "Custom_report"){
+      if(all_data %>% filter(y_name==ianalysis & analyse_LARGE_STRICT==analysis_type) %>% nrow == 0){
+        
+      } else {
+        ggwithout <- all_data %>% 
+          filter(y_name==ianalysis & analyse_LARGE_STRICT==analysis_type) %>% 
+          .[["gg_withoutErrors"]] %>% 
+          .[[1]] 
+        
+        ggwithout %>% 
+          print()
+          cat("\n")
+          
+        ggsave(
+          plot =  ggwithout + 
+            theme_light(base_size = 12) + 
+            theme(
+              legend.position = "none", 
+              axis.text.x = element_text(angle = 45, hjust = 1, size = rel(0.8), face = "italic")
+            ), 
+          filename = paste0(
+            images_dir, 
+            "OR_",
+            params$group_name, "_",
+            ianalysis,"_",
+            analysis_type, "_warning.png"
+          ),
+          device = "png",
+          width = 6.3, 
+          height = 4.7, 
+          units = "in",
+          dpi = 300
+        ) # ready for publication ! 
+
+      }
+    }
+  }
+}
+
+```
+
+### Tables {-}
+
+```{r res_rare}
+if (params$what %in% "Report_allin") {
+  message("Report_allin")
+  DT::datatable(
+    data = res_rare, 
+    rownames = FALSE,
+    extensions = 'Buttons', 
+    options = list(
+      dom = 'Bfrtip',
+      buttons = c('csv', 'excel'),
+      scrollX = TRUE
+    )
+  )
+} 
+if (params$what %in% "Report_light") {
+  message("Report_light")
+  cat(
+    "`Report_light` selected: See results in excel files : `",
+    paste0(
+      "000-RESULTS/", 
+      params$group_name, "_", 
+      params$analysis_to_import,
+      "_rare.xlsx"
+    ), "`.\n\n"
+  )
+  list(res_rare) %>%
+  `names<-`(c("RareResults")) %>%
+  writexl::write_xlsx(
+    path = paste0(
+      params$res_dir, 
+      params$group_name, "_", 
+      params$analysis_to_import,
+      "_rare.xlsx"
+    ),
+    col_names = TRUE
+  )
+}
+```
+
+
+## Genes/Transcripts Informations
+
+```{r gene_by_gene, results = "asis"}
+for (igene in unique(list_transcripts[["gene_name"]])) {
+  list_transcripts_igene <- list_transcripts %>%
+    filter(gene_name == igene) %>%
+    .$Transcript
+
+  cat("\n")
+  cat("\n###", igene, "\n")
+  cat("\n")
+
+  for (itranscript in list_transcripts_igene) {
+    cat("\n####", itranscript, paste0("(", igene, ")"), "{.tabset .tabset-fade .tabset-pills}\n\n")
+    
+    file_raw = paste0(params$raw_directory, igene, "/", igene, "_", itranscript, "_raw.xlsx")
+    
+    if (file.exists(file_raw)) {
+      annotation_raw <- readxl::read_excel(path = file_raw, sheet = 1)
+  
+      ## graph commun pour ce gene, ce transcript ...
+      cat("\n")
+      cat("\n##### Figures {- .tabset}\n")
+      cat("\n")
+      
+      cat("\n")
+      cat("\n###### Quality and Depth {-}\n")
+      cat("\n")
+  
+      annotation_raw <- annotation_raw %>%
+        dplyr::filter(!is.na(QUALmean)) %>%
+        dplyr::filter(!is.na(DPmean)) %>%
+        dplyr::filter(!is.na(Type_Variant))
+  
+      if (nrow(annotation_raw) > 0) {
+        gg_annotation <- annotation_raw %>%
+          dplyr::mutate(x = as.numeric(gsub(".*_", "", chr_pos)) / 1000) %>%
+          tidyr::gather(key = "quality_measure", value = "y", QUALmean, DPmean) %>%
+          dplyr::select(quality_measure, x, y, Type_Variant) %>%
+          dplyr::mutate(quality_measure = factor(x = quality_measure, levels = c("QUALmean", "DPmean")))
+  
+        p_quality <- ggplot2::ggplot(
+          data = gg_annotation,
+          mapping = ggplot2::aes(x = x, y = y)
+        ) +
+          ggplot2::geom_point(shape = 21, colour = viridis_pal(begin = 1 / 5, end = 1 / 5)(1)) +
+          ggplot2::geom_hline(
+            data = data.frame(yintercept = params$QUALmean_treshold, quality_measure = "QUALmean"),
+            mapping = ggplot2::aes(yintercept = yintercept),
+            colour = "red"
+          ) +
+          ggplot2::facet_grid(cols = dplyr::vars(Type_Variant), rows = dplyr::vars(quality_measure), scales = "free_y") +
+          ggplot2::labs(
+            x = "Position on the gene (Kb)",
+            y = NULL, # "Quality/Depth Measure",
+            title = paste0(
+              igene, " (Chromosome ", unique(gsub("_.*", "", annotation_raw[["chr_pos"]])), ")"
+            ),
+            subtitle = paste0(
+              scales::percent(
+                x = replace_na(
+                  data = sum(
+                    annotation_raw[["QUALmean"]] < params$QUALmean_treshold &
+                      annotation_raw[["Type_Variant"]] %in% "SNP"
+                  ) / sum(annotation_raw[["Type_Variant"]] %in% "SNP"),
+                  replace = 0
+                )
+              ),
+              " of SNPs and ",
+              scales::percent(
+                x = replace_na(
+                  data = sum(
+                    annotation_raw[["QUALmean"]] < params$QUALmean_treshold &
+                      annotation_raw[["Type_Variant"]] %in% "INDEL"
+                  ) / sum(annotation_raw[["Type_Variant"]] %in% "INDEL"),
+                  replace = 0
+                )
+              ),
+              " of INDELs excluded because of bad quality"
+            ),
+            caption = paste("The red line is the QUAL threshold =", params$QUALmean_treshold)
+          ) +
+          ggplot2::scale_x_continuous(
+            labels = scales::comma, 
+            expand = expansion(mult = c(0.1, 0))
+          ) +
+          ggplot2::scale_y_continuous(limits = c(0, NA))
+  
+        print(p_quality)
+        cat("\n")
+      } else {
+        cat("NOTE: Data not available to draw the figure!\n")
+        cat("\n")
+      }
+        
+      cat("\n")
+      cat("\n###### Consequences {-}\n")
+      cat("\n")
+  
+      if (nrow(annotation_raw) > 0 && ! is.null(annotation_raw[["Consequence"]])) {
+        (
+          annotation_raw[["Consequence"]] %>%
+            table() %>%
+            as.data.frame() %>%
+            `names<-`(c("Consequence", "Count")) %>%
+            dplyr::mutate(Percentage = Count / sum(Count)) %>%
+            ggplot2::ggplot(mapping = ggplot2::aes(x = Consequence, y = Percentage)) +
+            ggplot2::geom_bar(stat = "identity", fill = viridis_pal(begin = 1 / 5, end = 1 / 5)(1)) +
+            ggplot2::geom_text(mapping = ggplot2::aes(label = Count), vjust = -0.5, colour = "black") +
+            ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 60, vjust = 1, hjust = 1)) +
+            ggplot2::scale_y_continuous(
+              labels = scales::percent, 
+              expand = expansion(mult = c(0, 0.15))
+            ) +
+            ggplot2::labs(
+              x = NULL,
+              y = "Percentage",
+              title = igene,
+              subtitle = "Count and percentage of consequence types available"
+            )
+        ) %>%
+          print()
+        cat("\n")
+      } else {
+        cat("NOTE: Data not available to draw the figure!\n")
+        cat("\n")
+      }
+        
+      ## RES specifique a chaque analyses:
+      cat("\n")
+      cat("\n##### QC and Clinical Data {- .tabset}\n")
+      cat("\n")
+      for (ianalysis in params$analysis_to_import) {
+        analysis_type = unique(res_rare$analyse_LARGE_STRICT)
+        {
+          cat("\n")
+          cat("\n###### ", ianalysis, "_", analysis_type, " {-}\n", sep = "")
+          cat("\n")
+          
+          ## Table or Image (Flowchart?) of the QC at each step
+          QC0to11 <- QC_db[grep(igene,QC_db)][[1]] %>% 
+            select(starts_with("QC"))
+     
+          if (nrow(QC0to11) > 0) {
+            lapply(QC0to11, FUN = function(x) {
+               x[[1]]$Comment
+            }) %>%
+              do.call("rbind",.) %>%
+              `colnames<-`("Comment") %>%
+              as.data.frame() %>% 
+              tibble::rownames_to_column(var = "Step") %>%
+              dplyr::mutate(
+                Step = Step %>%
+                  gsub("QC", "", .) %>%
+                  as.numeric() %>%
+                  sprintf("QC%02d", .),
+                Comment = Comment %>%
+                  gsub("After[^,]*, ", "", .) %>%
+                  gsub("On[^,]*, ", "", .) %>%
+                  gsub("there is no", "0", .)
+              ) %>%
+              pretty_kable(data = ., row.names = FALSE, align = c("c", "l"), full_width = FALSE) 
+            cat("\n")
+          } else {
+            cat("NOTE: Data not available!\n")
+            cat("\n")
+          }
+          
+          if ("clinicalData" %in% names(Log[grep(igene,Log)][[1]])) {
+            clinDta <- Log[grep(igene,Log)][[1]] %>% 
+              select(clinicalData) %>% 
+              unlist(., recursive = FALSE)
+              
+            if(length(clinDta)==2) {
+              ## first elecment : ClinicalData df to show
+              #  sec elecment : Mean sd.. of trait per number of carried mutation
+              trash <- lapply(X = clinDta, FUN = function(.x) {
+                .x %>% ## sec elecment : ClinicalData df to show
+                as.data.frame() %>%
+                (function(dt) {
+                  if (nrow(dt) == 0) {
+                    cat("NOTE: No clinical data available!\n")
+                    cat("\n")
+                  } else {
+                    pretty_kable(data = dt, row.names = FALSE, align = "c", full_width = FALSE) 
+                    cat("\n")
+                  }
+                }) %>%
+                invisible()
+              })
+              
+              ## ggplot saved to includ 
+              ggtoinclud <- paste0(
+                gsub("000-RESULTS/", "", params$res_dir),
+                igene, "/", 
+                igene, "_", itranscript, "_", analysis_type, "_", ianalysis, "_boxplot.png"
+              )
+              
+              if (!file.exists(ggtoinclud)) {
+                cat("NOTE: No graph about trait ~ Number of carried mutations!\n")
+                cat("\n")
+              } else {
+                cat("![](",ggtoinclud,")")
+                cat("\n")
+              }
+              
+              
+            } else {
+              clinDta$clinicalData %>% ## length == 1 (only ClinicalData df to show)
+              as.data.frame() %>%
+              (function(dt) {
+                if (nrow(dt) == 0) {
+                  cat("NOTE: No clinical data available!\n")
+                  cat("\n")
+                } else {
+                  pretty_kable(data = dt, row.names = FALSE, align = "c", full_width = FALSE) 
+                  cat("\n")
+                }
+              }) %>%
+              invisible()
+            }
+          } else {
+            cat("NOTE: No clinical data available in this custom version !\n")
+            cat("\n")  
+          }
+        }
+      }
+    } else {
+      cat("NOTE: No data available!\n")
+      cat("\n")
+    }
+    
+  }
+}
+```
+
+# References

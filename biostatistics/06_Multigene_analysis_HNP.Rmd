@@ -1,0 +1,271 @@
+---
+title: 'Multigene analysis Healthy Nevada Project'
+author: 'Mathilde Boissel'
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+monofont: "Source Code Pro"
+monofontoptions: "Scale=0.7"
+params:
+  outputCode: FALSE
+  nCores: !r parallel::detectCores()
+  theme_dark: FALSE
+  cache: FALSE
+  dpi: 120
+  ggFontSize: 9
+  yname: "T2D_status"
+  input_file: '/HealthyNevadaProject/HNP_carriers_8genes_EXP-085-v3_ht322_20200306.tsv'
+  DATA_QCed: './Data/03_Replic_HealthyNevada/DATA_QCed.rds'
+  Genes_Variants03: './Data/03_Replic_HealthyNevada/Genes_Variants.rds'
+  Genes_Variants02: './Data/02_Replic_UKBioBank/Genes_Variants.rds'
+  res_MiST: './Data/06_Multigene_analysis_HNP/stat_MiST.RDS'
+  res_rare: './Data/06_Multigene_analysis_HNP/stat_rare.RDS'
+  res_detail: './Data/06_Multigene_analysis_HNP/multigene_HNP.xlsx'
+output:
+  bookdown::html_document2:
+    theme: simplex
+    toc: true
+    toc_depth: 2
+    toc_float: 
+      collapsed: false
+    fig_width: 6.3
+    fig_height: 4.7
+    number_sections: true
+    self_contained: true
+    mathjax: default
+  bookdown::pdf_document2:
+    toc: true
+    toc_depth: 2
+    fig_width: 6.3
+    fig_height: 4.7
+    number_sections: true
+    latex_engine: "pdflatex"
+references:
+- id: sun_unified_2013
+  title: A Unified Mixed-Effects Model for Rare-Variant Association in Sequencing Studies
+  author:
+    - family: Sun
+      given: Jianping
+    - family: Zheng
+      given: Yingye
+    - family: Hsu
+      given: Li
+  container-title: Genetic Epidemiology
+  volume: 37
+  URL: 'http://dx.doi.org/10.1002/gepi.21717'
+  DOI: 10.1002/gepi.21717
+  issue: 4
+  number: 4
+  issn: 07410395
+  publisher: Wiley
+  page: 334--344
+  type: article-journal
+  issued:
+    year: 2013
+    month: 3
+    day: 9
+---
+
+```{r setup, include = FALSE}
+options(stringsAsFactors = FALSE)
+
+script_name <- "06_Multigene_analysis_HNP"
+project_directory <- "./"
+working_directory <- gsub("/PROJECT/", "/DATATMP/", project_directory)
+output_directory <- paste(working_directory, script_name, sep = "/")
+
+### Load packages
+invisible(
+  lapply(
+    c(
+      "utils", "grDevices", "graphics", "stats", "methods",
+      "parallel", "scales", "readxl", "mongolite", "tidyverse",
+      "knitr", "Hmisc", "kableExtra"
+    ),
+    library,
+    character.only = TRUE
+  )
+)
+SourceDir <- paste0(project_directory, "/utils")
+source(paste0(SourceDir, "/pretty_kable.R"))
+source(paste0(SourceDir, "/colFmt.R"))
+source("./utils/all_my_snippets.R")
+
+### Set knitr rmarkdown chunk options
+opts_chunk$set(
+  results = "asis",
+  size = "small",
+  include = TRUE,
+  echo = params$outputCode,
+  warning = params$outputCode,
+  message = params$outputCode,
+  tidy = FALSE,
+  crop = TRUE,
+  autodep = TRUE,
+  fig.align = "center",
+  fig.pos = "!h",
+  dpi = params$dpi,
+  fig.path = paste0(tempdir(), "/cache/"),
+  cache = params$cache,
+  cache.path = paste0(tempdir(), "/cache/")
+)
+
+
+### Define theme
+theme_set(theme_light(base_size = params$ggFontSize))
+
+## read RAW etc
+DATA_QCed <- read_rds(path = params$DATA_QCed)
+Genes_Variants03 <- readr::read_rds(path = params$Genes_Variants03)
+Group6 <- names(Genes_Variants03)
+Genes_Variants02 <- readr::read_rds(path = params$Genes_Variants02)
+Group7 <- names(Genes_Variants02)
+covariates_names <- c("age_now", "is_female", "median_BMI", "PC1", "PC2", "PC3", "PC4", "PC5") 
+
+```
+
+# Parameters
+
+  + "Super-Clusters"  
+Two clusters of genes have been analysed :  
+    - **Group6** ("8 gènes replication seen in HNP"): `r paste(Group6,collapse = ", ")`.  
+    - **Group7** ("7 gènes replication seen in UK"): `r paste(Group7,collapse = ", ")`.  
+
+
+# Material & Methods
+
+## Phenotype
+
++ The raw file used for this analyses is ``r basename(params$input_file)`` sent by Amélie (2020/03/08).
++ We have defined the phenotype of interest `T2D_status` as 1 if `HNP_T2D_case`==1 or 0 if `HNP_T2D_control`==1.
++ We have used the following covariates as adjustement: **`r paste_and_withquote(covariates_names)`**
+
+## Genotypes
+
++ Genotype was set to:
+  - `0`, if no pathogenic variant was detected,
+  - `1`, if a pathogenic variant was detected.
+  
+## Ethnicity
+
+```{r ethnicity}
+cat("\n")
+ggplot(
+  data = DATA_QCed, 
+  mapping = aes(x = PC1, y = PC2)
+) +
+  geom_point(shape = 21) +
+  labs(title = "PCA on Healthy Nevada Project population") 
+cat("\n")
+```
+
+## Quality Control
+
++ **[QC01]** Filter on phenotypes.  
+  Any missing values in the selected phenotype and covariates make the individual excluded from the analysis.  
+  Remove ``r length(read_rds(path = paste0(gsub(script_name, "03_Replic_HealthyNevada", output_directory), "/QC1_missingValues.rds")))`` individuals.
+
+## Statistical Analyses 
+ 
+Rare variants have been analysed with the method *MiST* [@sun_unified_2013].  
+**All variants are analysed as one cluster (based on groups mentioned above) with subclusters based on genes**.  
+This method provides a score $\pi$ which represents the mean effect of the cluster and a score $\tau$ which represents the heterogeneous effect of the cluster.  
+The overall p-value tests the association between the set of variants and the trait of interest.  
+
+
+Let the equation of the model be: $Y = \alpha X + \hat{\pi} GZ$, where  
+$Y$ is the phenotype matrix (n x 1) for n individuals,  
+$X$ is the matrix of covariates (n x p) with p covariates,  
+$Z$ is the matrix (q x c) coded 0 or 1 if the q-th variant belong or not to the c-th gene and  
+$G$ is the genotype matrix (n x q) coded 1 for carriers and 0 for non-carriers.
+
+The main statistical analysis were performed with the following covariates:
+
+  + A case-control study for type 2 diabetes risk (`r params$yname`) adjusted for `r paste_and_withquote(covariates_names)`. 
+
+
+# Results 
+
+## MIST  
+
+```{r res_MiST}
+res_MiST <- map_df(c("Group6", "Group7"), function(igroup){
+  read_rds(path = gsub(".RDS", paste0("_", igroup, ".RDS"), params$res_MiST)) %>% 
+    mutate(Group = igroup)
+})
+
+res_MiST$covariates <- gsub(";", ";\n", res_MiST$covariates)
+
+res_MiST %>% 
+  select(Group, trait, covariates, sample_size, everything()) %>% 
+  mutate_at(.vars = c("S.pi", "p.value.S.pi", "S.tau", "p.value.S.tau"), .funs = formatC) %>%  
+  mutate(P.values_col = map(.x = p.value.overall,.f = function(.x) ifelse(as.numeric(.x)<0.05, TRUE, FALSE))) %>% 
+  mutate(P.values_col = ifelse(is.na(P.values_col), FALSE, P.values_col)) %>% 
+  mutate(
+    p.value.overall = map2(.x = p.value.overall, .y = P.values_col, .f = function(.x, .y) {
+      cell_spec(
+      formatC(.x), 
+      color = ifelse(.y, "white", "grey"), 
+      background = ifelse(.y, "firebrick", "None"),
+      bold = ifelse(.y, TRUE, FALSE))
+    })
+  ) %>% 
+  select(-P.values_col) %>% 
+  kable(align = "c", format = "html", escape = FALSE, row.names = FALSE) %>% 
+  kable_styling(bootstrap_options = c("bordered", "condensed", "responsive", "striped"), full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>% 
+  collapse_rows(columns = 1)
+```
+
+## Clinical data  {.tabset} 
+
+```{r Clinicaldata}
+for (igroup in c("Group6", "Group7")) {
+  cat("### ", igroup, "{-} \n\n")
+  clinicalDta <- read_xlsx(path =  gsub(".xlsx", paste0("_", igroup, ".xlsx"), params$res_detail), sheet = 2)
+  pretty_kable(clinicalDta, row.names = FALSE)
+}
+```
+
+## Odd Ratios  {.tabset} 
+
+```{r res_rare}
+for (igroup in c("Group6", "Group7")) {
+  cat("### ", igroup, "{-} \n\n")
+  res_rare <- read_rds(path =  gsub(".RDS", paste0("_", igroup, ".RDS"), params$res_rare))
+  pretty_kable(res_rare, row.names = FALSE)
+}
+
+```
+
+## Plots of clusters {.tabset} 
+
+```{r plot_cluster}
+for (igroup in c("Group6", "Group7")) {
+  cat("### ", igroup, "{-} \n\n")
+  
+  annot <- read_xlsx(path =  gsub(".xlsx", paste0("_", igroup, ".xlsx"), params$res_detail), sheet = 1)
+  
+  (
+  ggplot(data = annot, aes(y = Variant, x = GENE)) +
+    ggtitle(paste0("Analysed cluster for ", igroup)) +
+    ylab("Variants") +
+    xlab("subClusters") +
+    geom_tile(fill = "grey50", colour = "grey80") + 
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_discrete(expand = c(0, 0)) +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(), 
+      panel.grid.major.y = element_blank(), 
+      panel.grid.minor.y = element_blank()
+    )
+  ) %>% 
+    print()
+  
+  cat("\n\n")
+}
+
+```
+
+# References
+

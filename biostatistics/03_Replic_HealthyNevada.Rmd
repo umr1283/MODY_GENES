@@ -1,0 +1,383 @@
+---
+title: '[MODY_GENES] Replication Healthy Nevada Project'
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+monofont: 'Source Code Pro'
+monofontoptions: "Scale=0.7"
+always_allow_html: true
+params:
+  alpha_threshold: 0.05
+  cache: no
+  dpi: 180
+  gg_fontsize: 9
+  output_code: no
+  input_file: '/HealthyNevadaProject/HNP_carriers_8genes_EXP-085-v3_ht322_20200306.tsv'
+  ALL_DATA: './Data/03_Replic_HealthyNevada/ALL_DATA.rds'
+  DATA_QCed: './Data/03_Replic_HealthyNevada/DATA_QCed.rds'
+  res_dir: './Data/03_Replic_HealthyNevada/MiST_results.xlsx'
+output:
+  bookdown::html_document2:
+    theme: simplex
+    toc: true
+    toc_depth: 4
+    toc_float: 
+      collapsed: false
+    fig_width: 6.3
+    fig_height: 4.7
+    number_sections: true
+    self_contained: true
+    mathjax: default
+references:
+- DOI: 10.1002/gepi.21717
+  URL: 'http://dx.doi.org/10.1002/gepi.21717'
+  author:
+  - family: Sun
+    given: Jianping
+  - family: Zheng
+    given: Yingye
+  - family: Hsu
+    given: Li
+  container-title: Genetic Epidemiology
+  id: sun_unified_2013
+  issn: 07410395
+  issue: 4
+  issued:
+    day: 9
+    month: 3
+    year: 2013
+  number: 4
+  page: 334--344
+  publisher: Wiley
+  title: A Unified Mixed-Effects Model for Rare-Variant Association in Sequencing
+    Studies
+  type: article-journal
+  volume: 37
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+options(stringsAsFactors = FALSE)
+
+script_name <- "03_Replic_HealthyNevada"
+project_directory <- "./"
+working_directory <- gsub("/PROJECT/", "/DATATMP/", project_directory)
+output_directory <- paste(working_directory, script_name, sep = "/")
+
+library(parallel)
+library(scales) ## scale
+library(readr) ## read_tsv and cols
+library(writexl)
+library(readxl)
+library(dplyr) ## %>% 
+library(purrr) # map 
+library(knitr) # kable 
+library(kableExtra) # styling 
+library(tidyr) ## pivot
+library(tidyverse)
+SourceDir <- paste0(project_directory, "/utils")
+source(paste0(SourceDir, "/MiST.R"))
+source(paste0(SourceDir, "/Summary_clinique.R"))
+source("./utils/all_my_snippets.R")
+
+# knitr::opts_chunk$set(echo = TRUE)
+### Set knitr rmarkdown chunk options
+knitr::opts_chunk$set(
+  results = "asis",
+  size = "small",
+  include = TRUE,
+  echo = params$output_code,
+  warning = params$output_code,
+  message = params$output_code,
+  tidy = FALSE,
+  crop = TRUE,
+  autodep = TRUE,
+  fig.align = "center",
+  fig.pos = "!h",
+  dpi = params$dpi,
+  fig.path = paste0(tempdir(), "/cache/"),
+  cache = params$cache,
+  cache.path = paste0(tempdir(), "/cache/")
+)
+
+### Define theme
+theme_set(theme_light(base_size = params$gg_fontsize))
+
+## read RAW etc
+ALL_DATA <- read_rds(path = params$ALL_DATA)
+Genes_Variants <- read_rds(path = paste0(output_directory, "/Genes_Variants.rds"))
+genes_of_interest <- sort(names(Genes_Variants))
+covariates_names <-  c("age_now", "is_female", "median_BMI", "PC1", "PC2", "PC3", "PC4", "PC5") 
+res <- readxl::read_xlsx(path = params$res_dir) %>% 
+  mutate(SubClusters = NULL)
+```
+
+# Phenotype
+
++ The raw file used for this analyses is ``r basename(params$input_file)`` sent by Amélie (2020/03/08).
++ We have defined the phenotype of interest `T2D_status` as 1 if `HNP_T2D_case`==1 or 0 if `HNP_T2D_control`==1.
++ We have recoded the covariate `is_female` as TRUE if `SEX`==`F` or FALSE if `SEX`==`M`.
++ We have used the following covariates as adjustement: **`r paste_and_withquote(covariates_names)`**
+
+```{r PhenotypeQuali, results='asis'}
+## Quali var
+
+with(ALL_DATA, table(T2D_status, useNA = "always")) %>%
+  broom::tidy() %>% 
+  tidyr::spread(key = T2D_status, value = n) %>% 
+  rename("NA" = `<NA>`) %>% 
+  kable(align = "c", format = "html", escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("bordered", "condensed", "responsive", "striped"), full_width = FALSE, position = "center") %>%
+  column_spec(1, bold = TRUE) %>%
+  add_header_above(c("T2D_status" = 3))
+cat("\n\n")
+with(ALL_DATA, table(is_female, useNA = "always")) %>%
+  broom::tidy() %>% 
+  tidyr::spread(key = is_female, value = n) %>% 
+  rename("NA" = `<NA>`) %>% 
+  kable(align = "c", format = "html", escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("bordered", "condensed", "responsive", "striped"), full_width = FALSE, position = "center") %>%
+  column_spec(1, bold = TRUE) %>%
+  add_header_above(c("is_female" = 3))
+cat("\n\n")
+with(ALL_DATA, table(T2D_status, is_female, useNA = "always")) %>%
+  broom::tidy() %>% 
+  tidyr::spread(key = is_female, value = n) %>% 
+  rename("NA" = `<NA>`) %>% 
+  kable(align = "c", format = "html", escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("bordered", "condensed", "responsive", "striped"), full_width = FALSE, position = "center")  %>%
+  column_spec(1, bold = TRUE) %>%
+  add_header_above(c(" ", "is_female" = 3))
+cat("\n\n")
+```
+
+```{r PhenotypeQuanti}
+## Quanti var
+df.num <- ALL_DATA %>%
+  dplyr::select(., covariates_names) %>%
+  dplyr::select(., -is_female) %>%
+  dplyr::summarise_each(
+    list(
+      ~ n(),
+      ~ min(., na.rm = TRUE),
+      ~ median(., na.rm = TRUE),
+      ~ max(., na.rm = TRUE),
+      ~ mean(., na.rm = TRUE),
+      ~ sd(., na.rm = TRUE),
+      ~ sum(is.na(.))
+    )
+  )  
+df.num.tidy <- df.num %>% 
+  gather(Variable, val) %>%
+  mutate(stat = map_chr(.x = Variable, .f = ~ tail(unlist(strsplit(x = .x, "_")), 1))) %>%
+  mutate(Variable = map_chr(.x = Variable, .f = ~ paste(head(unlist(strsplit(x = .x, "_")),-1), collapse = "_"))) %>%
+  spread(stat, val) %>% 
+  rename("NA" = "sum")
+
+df.num.tidy %>% 
+  select(Variable, n, min, median, max, mean, sd, `NA`) %>% 
+  mutate_if(.predicate = is.numeric, .funs = prettyNum, digits = 4) %>% 
+  kable(align = "c", format = "html", escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("bordered", "condensed", "responsive", "striped"), full_width = FALSE, position = "center") %>% 
+  column_spec(1, bold = TRUE)
+cat("\n\n")
+```
+
+
+# Material & Methods
+
+## Ethnicity
+
+```{r ethnicity}
+cat("\n")
+ggplot(
+  data = ALL_DATA, 
+  mapping = aes(x = PC1, y = PC2)
+) +
+  geom_point(shape = 21) +
+  labs(title = "PCA on UK BioBank population") 
+cat("\n")
+```
+
+## Genotypes
+
++ Genotype was set to:
+  - `0`, if no pathogenic variant was detected,
+  - `1`, if a pathogenic variant was detected.
+  
+## Quality Control
+
++ **[QC01]** Filter on phenotypes.  
+  Any missing values in the selected phenotype and covariates make the individual excluded from the analysis.  
+  Remove ``r length(read_rds(path = paste0(output_directory, "/QC1_missingValues.rds")))`` individuals.
+
+
+## Statistical Analyses 
+ 
+Rare variants have been analysed with the method *MiST* [@sun_unified_2013].  
+This method has been improved in the R package [`MiSTr`](https://github.com/mcanouil/MiSTr) done by the UMR1283's biostat team.
+
+All variants are analysed as a single cluster (at the gene scale, transcript by transcript) without subcluster based on mutation's type.  
+This method provides a score $\pi$ which represents the mean effect of the cluster and a score $\tau$ which represents the heterogeneous effect of the cluster.  
+The overall p-value tests the association between the set of variants and the trait of interest.  
+
+Let the equation of the model be: $Y = \alpha X + \hat{\pi} GZ$, where
+
+$Y$ is the phenotype matrix (n x 1) for n individuals,  
+$X$ is the matrix of covariates (n x p) with p covariates,  
+$Z$ is a vector of q ones for the q variants and  
+$G$ is the genotype matrix (n x q) coded 1 for carriers and 0 for non-carriers.
+<!-- coded 0, 1 and 2 for AA, Aa, aa, where A is a major allele and a is a minor allele. -->
+
+
+# Results {.tabset .tabset-fade .tabset-pills}
+
+Global MiST results have been written in the file `MiST_results.xlsx`. 
+For details of each analysis, a file have been written for each gene (named as follow `[gene_name].xlsx`) to show all variants involved in the analysis and counts of carriers in cases and controls.
+
+
+## Tables {-}
+
+```{r Results}
+res %>% 
+  mutate(
+    p.value.overall = cell_spec(
+      formatC(p.value.overall), 
+      color = ifelse(p.value.overall < 0.05 & !is.na(p.value.overall), "white", "grey"), 
+      background = ifelse(p.value.overall < 0.05& !is.na(p.value.overall), "firebrick", "None"),
+      bold = ifelse(p.value.overall < 0.05 & !is.na(p.value.overall), TRUE, FALSE)), 
+    p.value.S.pi = formatC(p.value.S.pi),
+    p.value.S.tau = formatC(p.value.S.tau),
+  ) %>% 
+  kable(align = "c", format = "html", escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("bordered", "condensed", "responsive", "striped"), full_width = FALSE) %>% 
+  column_spec(1, bold = TRUE) 
+```
+
+## Figures {-}
+
+```{r graphs_rare}
+res_rare_signif <- res %>%  
+  mutate(
+    Pvalue_Overall = as.factor(
+      ifelse(test = p.value.overall <= params$alpha_threshold & !is.na(p.value.overall), 
+             yes = paste0("Pv<=", params$alpha_threshold), 
+             no = paste0("Pv>", params$alpha_threshold, " or NA")
+            )
+    )
+  ) %>% 
+  group_by(Gene_Name) %>% 
+  mutate(avg_spi = rep(mean( S.pi ), n())) %>% 
+  ungroup() %>% 
+  arrange(desc(avg_spi), Gene_Name, desc(S.pi)) %>%
+  mutate(Gene_Name = factor(x = Gene_Name, levels = unique(Gene_Name)))
+        
+        
+if (nrow(res_rare_signif) > 50) {
+  caption.txt <- paste(
+    comma(nrow(res_rare_signif)), 
+    "genes were significant, only the top", params$max_signif, "is shown."
+  )
+  res_rare_signif <- res_rare_signif[head(order(res_rare_signif[["S.pi"]], decreasing = TRUE), params$max_signif), ]
+} else {
+  caption.txt <- ""
+}
+      
+factor_norm <- with(res_rare_signif, (max(S.tau) / max(S.pi)))
+S.tau_breaks <- pretty_breaks(n = 2)(res_rare_signif[["S.tau"]])
+      
+(ggplot(res_rare_signif) +
+  geom_hline(
+    data = data.frame(y = S.tau_breaks),
+    mapping = aes(yintercept = y / factor_norm),
+    linetype = 2, 
+    size = 0.25, 
+    colour = "grey87"
+  ) +
+  geom_bar(mapping = aes(x = Gene_Name, y = S.pi, fill = Pvalue_Overall), stat = "identity") +
+  geom_bar(mapping = aes(x = Gene_Name, y = S.tau / factor_norm, fill = "S.tau"), width = 0.25, stat = "identity") +
+  theme(
+    legend.text = element_text(size = rel(0.9)),
+    legend.key.size = unit(1, "lines"),
+    legend.position = "top", 
+    legend.justification = "left", 
+    legend.direction = "horizontal",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    legend.background = element_rect(colour = "grey70", fill = NA),
+    axis.text.x = element_text(angle = 75, vjust = 1, hjust = 1, size = rel(0.90))
+  ) +
+  scale_y_continuous(
+    expand = expand_scale(mult = c(0, 0.10)),
+    limits = c(0, NA),
+    sec.axis = sec_axis(
+      trans = ~. * factor_norm,
+      name = expression(Score(tau)),
+      breaks = S.tau_breaks
+    )
+  ) +
+  scale_fill_viridis_d(
+    begin = 1 / 5,
+    breaks = c(paste0("Pv<=", params$alpha_threshold), paste0("Pv>", params$alpha_threshold, " or NA"), "S.tau"),
+    labels = list(
+      bquote(Score(pi) ~ " with " ~ p[overall] <= .(params$alpha_threshold)),
+      bquote(Score(pi) ~ " with " ~ p[overall] > .(params$alpha_threshold) ~ " or NA"),
+      bquote(Score(tau))
+    )
+  ) +
+  labs(
+    title = paste("Rare Analyses of T2Dstatus in UKBioBank"),
+    caption = caption.txt,
+    y = expression(Score(pi)),
+    fill = NULL
+  )
+) %>% 
+  print()
+cat("\n\n")
+
+```
+
+# Gene by Gene 
+
+```{r annotation}
+cat("## Clinical Data {-}\n")
+ClinicalData <- read_excel(path = paste0( output_directory, "/", genes_of_interest[1], ".xlsx"), sheet = 2)  
+
+ClinicalData %>% 
+  kable(align = "c", format = "html", escape = FALSE, caption = "Clinical count same for all genes analysed.") %>%
+  kable_styling(bootstrap_options = c("bordered", "condensed", "responsive", "striped"), full_width = FALSE) %>% 
+  column_spec(1, bold = TRUE) 
+cat("\n\n")
+
+for (igene in genes_of_interest){
+  cat(paste("## ", igene, " {- .tabset .tabset-fade .tabset-pills}\n"))
+  
+  MyAnnotation <- read_excel(path = paste0( output_directory, "/", igene, ".xlsx"), sheet = 1)  %>% 
+    mutate(Variant = as.factor(as.character(Variant)))
+  
+  cat("### Annotation {-}\n")
+  (ggplot(data = MyAnnotation, mapping = aes(x = Variant, y = G_1)) + 
+    geom_bar(stat="identity") + 
+    labs(x = "Variants", y = "Carriers", title = NULL) +
+    theme(axis.text.x = element_text(angle = 65, hjust = 1, vjust = 1, size = 8))
+  ) %>% print()
+  cat("\n\n")
+
+  cat("### Variants list {-}\n")
+  cat(
+    "Following pathogenic variants were involved in this analysis:\n", 
+    paste("\n+ ", unlist(Genes_Variants[igene]), "\n"),
+    sep = ""
+  )
+  cat("\n\n")
+}
+
+```
+
+
+# R session information
+
+```{r session-info, results = "markup"}
+options("width" = 110)
+sessioninfo::session_info()
+```
