@@ -8,7 +8,7 @@ The repository includes both [bioinformatics](bioinformatics) and [biostatistics
 
 ## Bioinformatics
 
-The bioinformatics analysis were performed using the scripts in the [bioinformatics](bioinformatics) directory.  
+The bioinformatics analysis was performed using the scripts in the [bioinformatics](bioinformatics) directory.  
 The different analysis steps are listed in the plain text file [bioinformatics/template_analysis](bioinformatics/template_analysis), which is provided to the [bioinformatics/start_multiserveur.pl](bioinformatics/start_multiserveur.pl) script.  
 Then the [bioinformatics/start_sample.pl](bioinformatics/start_sample.pl) script is launched which all the different steps of the analysis.  
 All the different steps scripts can be found in the [bioinformatics/Include](bioinformatics/Include) directory.  
