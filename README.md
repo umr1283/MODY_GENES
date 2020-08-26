@@ -10,8 +10,9 @@ The repository includes both [bioinformatics](bioinformatics) and [biostatistics
 
 The bioinformatics analysis was performed using the scripts in the [bioinformatics](bioinformatics) directory.  
 The different analysis steps are listed in the plain text file [bioinformatics/template_analysis](bioinformatics/template_analysis), which is provided to the [bioinformatics/start_multiserveur.pl](bioinformatics/start_multiserveur.pl) script.  
-Then the [bioinformatics/start_sample.pl](bioinformatics/start_sample.pl) script is launched which all the different steps of the analysis.  
-All the different steps scripts can be found in the [bioinformatics/Include](bioinformatics/Include) directory.  
+Then the [bioinformatics/start_sample.pl](bioinformatics/start_sample.pl) script is launched with all the different steps of the analysis.
+
+All the different scripts to perform each steps can be found in the [bioinformatics/Include](bioinformatics/Include) directory.  
 These scripts use local databases:  
 - MySQL databases with informations about the different samples (*e.g.*, sample ID, sex, demultiplexing index and lane, raw data path) and the dbSNP annotations (version 135).  
 - A MongoDB database with the dbNSFP annotations (version 3.0).  
