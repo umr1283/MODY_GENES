@@ -18,17 +18,17 @@ These scripts use local databases:
 - A MongoDB database with the dbNSFP annotations (version 3.0).  
 - A Redis database with mutation counting informations.
 
-Tools, captures and sequencing adaptors paths can be passed by the files in the [bioinformatics/Config](bioinformatics/Config) directory.  
-Perl version used is Perl 5, version 16, subversion 3 (v5.16.3) on CentOS Linux 7 (Core, x86_64).
+Tools, captures and sequencing adaptors paths can be passed by the files in the [bioinformatics/Config](bioinformatics/Config) directory.
 
+Perl version used is Perl 5, version 16, subversion 3 (v5.16.3) on CentOS Linux 7 (Core, x86_64).
 
 ## Biostatistics
 
 The statistical analyses were performed using the scripts in the [biostatistics](biostatistics) directory.  
 All scripts are numbered according to the order of use.  
-The directory [biostatistics/utils](biostatistics/utils) contains additional scripts needed in the analyses.   
-The R version used is the 3.6.3 (2020-02-29) on Debian GNU/Linux 9 (stretch, x86_64) available as a Docker image ([umr1283/stat:R363](https://hub.docker.com/r/umr1283/stat)).
+The directory [biostatistics/utils](biostatistics/utils) contains additional scripts needed in the analyses.
 
+The R version used is the 3.6.3 (2020-02-29) on Debian GNU/Linux 9 (stretch, x86_64) available as a Docker image ([umr1283/stat:R363](https://hub.docker.com/r/umr1283/stat)).
 
 ## Contact
 
