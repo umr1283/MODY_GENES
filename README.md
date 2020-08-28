@@ -1,4 +1,4 @@
-# MODY GENES <img src="https://avatars1.githubusercontent.com/u/70200041?s=400&u=4a50dc780ca9f22de9dd34530836b48972965275&v=4" align="right" width="120" />
+# MODY GENES
 <!-- badges: start -->
 [![DOI](https://zenodo.org/badge/290171567.svg)](https://zenodo.org/badge/latestdoi/290171567)
 <!-- badges: end -->
