@@ -33,3 +33,9 @@ The R version used is the 3.6.3 (2020-02-29) on Debian GNU/Linux 9 (stretch, x86
 ## Contact
 
 For questions and other discussion, please contact the authors.
+
+## DOI
+
+[![DOI](https://zenodo.org/badge/290171567.svg)](https://zenodo.org/badge/latestdoi/290171567)
+
+
