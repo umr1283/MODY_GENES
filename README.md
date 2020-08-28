@@ -1,4 +1,7 @@
-# MODY GENES
+# MODY GENES <img src="https://avatars1.githubusercontent.com/u/70200041?s=400&u=4a50dc780ca9f22de9dd34530836b48972965275&v=4" align="right" width="120" />
+<!-- badges: start -->
+[![DOI](https://zenodo.org/badge/290171567.svg)](https://zenodo.org/badge/latestdoi/290171567)
+<!-- badges: end -->
 
 This repository contains all code and scripts used to perform the analyses described in the paper "Pathogenic variants in actionable MODY genes associate with type 2 diabetes".
 
@@ -33,9 +36,3 @@ The R version used is the 3.6.3 (2020-02-29) on Debian GNU/Linux 9 (stretch, x86
 ## Contact
 
 For questions and other discussion, please contact the authors.
-
-## DOI
-
-[![DOI](https://zenodo.org/badge/290171567.svg)](https://zenodo.org/badge/latestdoi/290171567)
-
-
