@@ -3,7 +3,7 @@
 [![DOI](https://zenodo.org/badge/290171567.svg)](https://zenodo.org/badge/latestdoi/290171567)
 <!-- badges: end -->
 
-This repository contains all code and scripts used to perform the analyses described in the paper "Pathogenic variants in actionable MODY genes associate with type 2 diabetes".
+This repository contains all code and scripts used to perform the analyses described in the paper "Pathogenic variants in actionable MODY genes associate with type 2 diabetes" (DOI:[10.1038/s42255-020-00294-3](https://doi.org/10.1038/s42255-020-00294-3)).
 
 The repository includes both [bioinformatics](bioinformatics) and [biostatistics](biostatistics) analyses.
 
